@@ -38,7 +38,11 @@ def get_core_device(devices: List[Device]) -> Device:
     for device in devices:
         if device.ip == "10.31.81.1":
             return device
+    # Fallback
+    if devices:
+        return devices[0]
     raise KeyError("could not find core device")
+
 
 
 def scrape_cadvisor_metrics_for_device(device: Device, rootdir: Path):
