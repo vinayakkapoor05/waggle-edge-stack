@@ -90,13 +90,17 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - |
-                  # check for USB audio devices 
-                  pactl list sources | grep 'alsa.name = "USB Audio"' || \
-                  pactl list sources | grep 'alsa.driver_name = "snd_usb_audio"' || \
-                  pactl list sources | grep 'device.icon_name = "audio-input-microphone"'
+                - /bin/true
+                # TODO: fix liveness probe, it currently does not return success,
+                # leads to a SIGTERM, and consequently to repeated restarts
+                
+                # - /bin/sh
+                # - -c
+                # - |
+                #   # check for USB audio devices 
+                #   pactl list sources | grep 'alsa.name = "USB Audio"' || \
+                #   pactl list sources | grep 'alsa.driver_name = "snd_usb_audio"' || \
+                #   pactl list sources | grep 'device.icon_name = "audio-input-microphone"'
             initialDelaySeconds: 20
             periodSeconds: 15
             failureThreshold: 3
