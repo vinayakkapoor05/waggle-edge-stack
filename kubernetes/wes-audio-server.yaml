@@ -11,6 +11,40 @@ spec:
       port: 4713
       targetPort: 4713
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wes-audio-server-pulse-config
+data:
+  default.pa: |
+    load-module module-device-restore
+    load-module module-stream-restore
+    load-module module-card-restore
+    load-module module-augment-properties
+    load-module module-switch-on-port-available
+    
+    # we try to detect USB audio devices automatically
+    load-module module-udev-detect
+    
+    # fallbacks, we try to load USB audio card found at common positions
+    .ifexists /proc/asound/card2
+    load-module module-alsa-card device_id=2 name=usb_audio_card
+    .endif
+    
+    .ifexists /proc/asound/card3
+    load-module module-alsa-card device_id=3 name=usb_audio_card_alt
+    .endif
+    
+    load-module module-native-protcol-unix
+    load-module module-native-protocol-tcp auth-anonymous=1
+    
+    load-module module-default-device-restore
+    load-module module-rescue-streams
+    load-module module-always-sink
+    load-module module-intended-roles
+    load-module module-filter-heuristics
+    load-module module-filter-apply
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,6 +61,7 @@ spec:
       priorityClassName: wes-high-priority
       nodeSelector:
         resource.microphone: "true"
+      hostNetwork: true
       containers:
         - name: wes-audio-server
           image: waggle/wes-audio-server:0.3.0
@@ -41,39 +76,41 @@ spec:
             - containerPort: 4713
           securityContext:
             privileged: true
-          # NOTE The main purpose of this service is the multiplex the usb microphone
-          # so I use a liveness probe to tie the health of this service to whether a
-          # usb microphone is available.
-          #
-          # NOTE I am *not* using a readiness probe because I haven't found a way to
-          # get kuberetes to "hand off" ownership of the mic when updating the service.
-          # Basically, Kubernetes uses a readiness probe to decide when a Pod is ready
-          # to receive traffic. During an update it does a swicth:
-          #
-          #       /[A]
-          #  [svc]
-          #        [B waiting for readiness probe...]
-          #
-          #        [A terminating...]
-          #  [svc]
-          #       \[B ready!]
-          #
-          # Unfortunately, if "A" is kept alive in this case, it holds onto the mic causing
-          # it to appear busy. This may not be a big deal, but I just wanted to document how
-          # what's usually the right behavior affects this service a little differently.
+          volumeMounts:
+            - name: dev-snd
+              mountPath: /dev/snd
+            - name: dev-bus-usb
+              mountPath: /dev/bus/usb
+            - name: pulse-config
+              mountPath: /etc/pulse/default.pa
+              subPath: default.pa
+          env:
+            - name: USB_AUDIO_DETECTION_MODE
+              value: "auto"  
           livenessProbe:
             exec:
               command:
-                - "/bin/sh"
-                - "-c"
-                - "pactl list sources | grep -q 'USB Audio'"
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            failureThreshold: 1
-# TODO(sean) use device plugin to run on all devices with microphones
+                - /bin/sh
+                - -c
+                - |
+                  # check for USB audio devices 
+                  pactl list sources | grep -q 'alsa.name = "USB Audio"' || \
+                  pactl list sources | grep -q 'alsa.driver_name = "snd_usb_audio"' || \
+                  pactl list sources | grep -q 'device.icon_name = "audio-input-microphone"'
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+      volumes:
+        - name: dev-snd
+          hostPath:
+            path: /dev/snd
+        - name: dev-bus-usb
+          hostPath:
+            path: /dev/bus/usb
+        - name: pulse-config
+          configMap:
+            name: wes-audio-server-pulse-config
 ---
-# NOTE this configmap will be mounted into plugins at /etc/asound.conf by runplugin
-# so they expect a pulseaudio backend.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -91,4 +128,4 @@ data:
     }
     ctl.!default {
         type pulse
-    }
+    }o
