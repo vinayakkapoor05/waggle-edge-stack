@@ -94,9 +94,9 @@ spec:
                 - -c
                 - |
                   # check for USB audio devices 
-                  pactl list sources | grep -q 'alsa.name = "USB Audio"' || \
-                  pactl list sources | grep -q 'alsa.driver_name = "snd_usb_audio"' || \
-                  pactl list sources | grep -q 'device.icon_name = "audio-input-microphone"'
+                  pactl list sources | grep 'alsa.name = "USB Audio"' || \
+                  pactl list sources | grep 'alsa.driver_name = "snd_usb_audio"' || \
+                  pactl list sources | grep 'device.icon_name = "audio-input-microphone"'
             initialDelaySeconds: 20
             periodSeconds: 15
             failureThreshold: 3
@@ -128,4 +128,4 @@ data:
     }
     ctl.!default {
         type pulse
-    }o
+    }
